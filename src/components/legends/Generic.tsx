@@ -3,6 +3,7 @@ import { NeuralLegend } from "./NeuralDetail/NeuralDetail";
 import { ChessLegend } from "./ChessDetail/ChessDetail";
 import { StoryLegend } from "./StoryDetail/StoryDetail";
 import { GoLegend } from "./GoDetail/GoDetail";
+import { CoralLegend } from "./CoralDetail/CoralDetail";
 
 import Typography from '@material-ui/core/Typography';
 import Table from '@material-ui/core/Table';
@@ -35,6 +36,8 @@ export var GenericLegend = ({ type, vectors, aggregate }: GenericLegendProps) =>
             return <ChessLegend selection={vectors}></ChessLegend>
         case DatasetType.Go:
             return <GoLegend selection={vectors} aggregate={aggregate}></GoLegend>
+        case DatasetType.Coral:
+            return <CoralLegend selection={vectors} aggregate={aggregate}></CoralLegend>
         default:
             return <div></div>
     }
