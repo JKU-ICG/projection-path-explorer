@@ -25,6 +25,11 @@ export class DatasetDatabase {
     constructor() {
         this.data = [
             {
+                display: "Coral Individual Samples",
+                path: "datasets/coral/coral_individual_data.csv",
+                type: DatasetType.Coral
+            },
+            {
                 display: "Coral Aggregate Cohorts",
                 path: "datasets/coral/coral_aggregate_data.csv",
                 type: DatasetType.Coral
