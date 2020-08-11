@@ -25,6 +25,16 @@ export class DatasetDatabase {
     constructor() {
         this.data = [
             {
+                display: "Coral 500 sub-sampled post Line Creation",
+                path: "datasets/coral/500_post_subsampled_individual_lines_path_explorer.csv",
+                type: DatasetType.Coral
+            },
+            {
+                display: "Coral 500 sub-sampled post Line Creation normalized",
+                path: "datasets/coral/500_post_subsampled_individual_normalized_lines_path_explorer",
+                type: DatasetType.Coral
+            },
+            {
                 display: "Coral Individual Samples",
                 path: "datasets/coral/coral_individual_data.csv",
                 type: DatasetType.Coral
