@@ -8,6 +8,9 @@ import ReactDOM = require('react-dom')
 import { setHoverWindowMode, WindowMode } from '../../Ducks/HoverSettingsDuck'
 
 import { MyWindowPortal } from '../WindowPortal/WindowPortal'
+import { GenericChanges } from '../../legends/GenericChanges/GenericChanges'
+import { Edge } from '../../Utility/graphs'
+import Cluster from '../../Utility/Data/Cluster'
 
 
 function HoverItemPortal(props) {
@@ -27,29 +30,60 @@ const SelectionClustersFull = function ({
         return null
     }
 
-    const genericAggregateLegend = currentAggregation.aggregation && currentAggregation.aggregation.length > 0 ? 
-                <GenericLegend aggregate={true} type={dataset.type} vectors={currentAggregation.aggregation} hoverUpdate={hoverUpdate}></GenericLegend> : 
-                <Box paddingLeft={2}>
-                    <Typography color={"textSecondary"}>
-                        Select Points in the Embedding Space to show a Summary Visualization.
+    const genericAggregateLegend = currentAggregation.aggregation && currentAggregation.aggregation.length > 0 ?
+        <GenericLegend aggregate={true} type={dataset.type} vectors={currentAggregation.aggregation} hoverUpdate={hoverUpdate}></GenericLegend> :
+        <Box paddingLeft={2}>
+            <Typography color={"textSecondary"}>
+                Select Points in the Embedding Space to show a Summary Visualization.
                     </Typography>
-                </Box>
+        </Box>
 
     return <div className={"Parent"}>
 
-        {hoverState && hoverState.data && hoverState.data instanceof Vect && <HoverItemPortal>
-            <Card elevation={24} style={{
-                width: 300,
-                maxHeight: '50vh',
-                minHeight: 300, //360 interferes with lineup
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-            }}>
-                <GenericLegend aggregate={false} type={dataset.type} vectors={[hoverState.data]} hoverUpdate={hoverUpdate}></GenericLegend>
-            </Card>
-        </HoverItemPortal>}
+        {
+            hoverState && hoverState.data && hoverState.data instanceof Vect && <HoverItemPortal>
+                <Card elevation={24} style={{
+                    width: 300,
+                    maxHeight: '50vh',
+                    minHeight: 300, //360 interferes with lineup
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }}>
+                    <GenericLegend aggregate={false} type={dataset.type} vectors={[hoverState.data]} hoverUpdate={hoverUpdate}></GenericLegend>
+                </Card>
+            </HoverItemPortal>
+        }
 
+        {
+            hoverState && hoverState.data && hoverState.data instanceof Edge && <HoverItemPortal>
+                <Card elevation={24} style={{
+                    width: 300,
+                    maxHeight: '50vh',
+                    minHeight: 300, //360 interferes with lineup
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }}>
+                    <GenericChanges dataset={dataset} vectorsA={hoverState.data.source.vectors} vectorsB={hoverState.data.destination.vectors}></GenericChanges>
+                </Card>
+            </HoverItemPortal>
+        }
+
+        {
+            hoverState && hoverState.data && hoverState.data instanceof Cluster && <HoverItemPortal>
+                <Card elevation={24} style={{
+                    width: 300,
+                    maxHeight: '50vh',
+                    minHeight: 300, //360 interferes with lineup
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }}>
+                    <GenericLegend aggregate={true} type={dataset.type} vectors={hoverState.data.vectors} hoverUpdate={hoverUpdate}></GenericLegend>
+                </Card>
+            </HoverItemPortal>
+        }
 
         {
             hoverSettings.windowMode == WindowMode.Extern ?

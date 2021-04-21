@@ -467,7 +467,11 @@ export const WebGLView = connector(class extends React.Component<Props, ViewStat
 
                             let edge = this.chooseEdge(this.mouseController.currentMousePosition)
                             if (edge) {
-                                console.log("edge")
+                                if (this.props.dataset.isSequential) {
+                                    this.lines.highlight([], this.getWidth(), this.getHeight(), this.scene)
+                                }
+                                this.particles.highlight(-1)
+                                
                                 if (this.currentHover !== edge) {
                                     this.currentHover = edge
                                     this.props.setHoverState(edge, UPDATER)
