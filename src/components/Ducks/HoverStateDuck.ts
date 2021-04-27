@@ -1,5 +1,6 @@
 import Cluster from "../Utility/Data/Cluster";
 import { Vect } from "../Utility/Data/Vect";
+import { Edge } from "../Utility/graphs";
 
 const SET = "ducks/hoverState/SET"
 
@@ -15,7 +16,7 @@ const initialState: HoverStateType = {
 }
 
 export type HoverStateType = {
-    data: Vect | Cluster,
+    data: Vect | Cluster | Edge,
     updater: String
 }
 

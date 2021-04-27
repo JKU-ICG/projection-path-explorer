@@ -71,16 +71,18 @@ export class ForceAtlas2EmbeddingController extends EmbeddingController {
 
 
         let self = this
-        this.worker.onmessage = function (e) {
-            switch (e.data.type) {
-                case 'progress':
-                case 'finish':
-                    var Y = e.data.positions
-                    self.stepper(Y)
-                    self.notifier()
-                    break
-            }
 
+        this.startingRoutine = () => {
+            this.worker.onmessage = function (e) {
+                switch (e.data.type) {
+                    case 'progress':
+                    case 'finish':
+                        var Y = e.data.positions
+                        self.stepper(Y)
+                        self.notifier()
+                        break
+                }
+            }
         }
         this.worker.postMessage({
             nodes: nodes.map(e => ({ x: e.x, y: e.y, meshIndex: e.view.meshIndex })),

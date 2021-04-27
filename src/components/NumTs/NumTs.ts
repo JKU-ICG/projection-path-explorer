@@ -219,3 +219,19 @@ export function mean(array) {
     const mean = array.reduce((a, b) => a + b) / n
     return mean
 }
+
+
+
+
+
+
+
+
+export function* uniqueIdentifierGenerator(): Generator<string, string> {
+    let id = 0
+    
+    while (true) {
+        yield id.toString()
+        id = id + 1
+    }
+}

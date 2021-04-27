@@ -21,6 +21,7 @@ import DeleteIcon from '@material-ui/icons/Delete';
 import { addProjectionAction, deleteProjectionAction } from '../../Ducks/ProjectionsDuck'
 
 import * as frontend_utils from '../../../utils/frontend-connect';
+import { PCAEmbeddingController } from './EmbeddingController/PCAEmbeddingController'
 
 const mapStateToProps = (state: RootState) => ({
     currentAggregation: state.currentAggregation,
@@ -133,6 +134,18 @@ export const EmbeddingTabPanel = connector((props: Props) => {
                         }}>{'ForceAtlas2'}</Button>
                 </Grid>
                 }
+                <Grid item>
+                    <Button
+                        style={{
+                            width: '100%'
+                        }}
+                        variant="outlined"
+                        onClick={() => {
+                            setDomainSettings('pca')
+                            setOpen(true)
+                        }}
+                    >{'PCA'}</Button>
+                </Grid>
             </Grid>
         </Box>
 
@@ -165,11 +178,11 @@ export const EmbeddingTabPanel = connector((props: Props) => {
                 setOpen(false)
                 props.setProjectionColumns(selection)
                 props.setProjectionParams(params)
-
+                
                 switch (domainSettings) {
-                    case 'tsne': {
-                        let controller = new TSNEEmbeddingController()
-                        controller.init(props.dataset, selection, params)
+                    case 'pca': {
+                        const controller = new PCAEmbeddingController()
+                        
                         controller.stepper = (Y) => {
                             props.dataset.vectors.forEach((vector, i) => {
                                 vector.x = Y[i][0]
@@ -178,7 +191,23 @@ export const EmbeddingTabPanel = connector((props: Props) => {
                             props.webGLView.current.updateXY()
                             props.webGLView.current.repositionClusters()
                         }
+                        controller.init(props.dataset, selection, params)
 
+                        setController(controller)
+                        break;
+                    }
+                    case 'tsne': {
+                        let controller = new TSNEEmbeddingController()
+                        
+                        controller.stepper = (Y) => {
+                            props.dataset.vectors.forEach((vector, i) => {
+                                vector.x = Y[i][0]
+                                vector.y = Y[i][1]
+                            })
+                            props.webGLView.current.updateXY()
+                            props.webGLView.current.repositionClusters()
+                        }
+                        controller.init(props.dataset, selection, params)
                         setController(controller)
                         break;
                     }
@@ -187,12 +216,10 @@ export const EmbeddingTabPanel = connector((props: Props) => {
                         let controller = new UMAPEmbeddingController()
                         let samples = params.useSelection ? props.currentAggregation.aggregation : props.dataset.vectors
 
-                        controller.init(props.dataset, selection, params, params.useSelection ? samples : undefined)
+                        
                         controller.stepper = (Y) => {
                             let source = controller.boundsY(Y)
                             let target = controller.targetBounds
-
-
 
                             samples.forEach((sample, i) => {
                                 if (controller.targetBounds) {
@@ -209,13 +236,13 @@ export const EmbeddingTabPanel = connector((props: Props) => {
                             props.webGLView.current.updateXY()
                             props.webGLView.current.repositionClusters()
                         }
-
+                        controller.init(props.dataset, selection, params, params.useSelection ? samples : undefined)
                         setController(controller)
                         break;
                     }
                     case 'forceatlas2': {
                         let controller = new ForceAtlas2EmbeddingController()
-                        controller.init(props.dataset, selection, params)
+                        
 
                         controller.stepper = (Y) => {
                             props.dataset.vectors.forEach((sample, i) => {
@@ -225,7 +252,7 @@ export const EmbeddingTabPanel = connector((props: Props) => {
                             })
                             props.webGLView.current.updateXY()
                         }
-
+                        controller.init(props.dataset, selection, params)
                         setController(controller)
                         break;
                     }

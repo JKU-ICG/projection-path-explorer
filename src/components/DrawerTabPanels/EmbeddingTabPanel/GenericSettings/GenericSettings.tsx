@@ -31,10 +31,19 @@ const useStyles = makeStyles((theme) => ({
     },
 }));
 
-const TSNESettings = ({ learningRate, setLearningRate, perplexity, setPerplexity }) => {
+const TSNESettings = ({ learningRate, setLearningRate, perplexity, setPerplexity, iterations, setIterations }) => {
 
 
     return <FormGroup>
+        <TextField
+            id="textIterations"
+            label="Iterations"
+            type="number"
+            value={iterations}
+            onChange={(event) => {
+                setIterations(event.target.value)
+            }}
+        />
         <TextField
             id="textPerplexity"
             label="Perplexity"
@@ -56,9 +65,18 @@ const TSNESettings = ({ learningRate, setLearningRate, perplexity, setPerplexity
     </FormGroup>
 }
 
-const UMAPSettings = ({ nNeighbors, setNNeighbors }) => {
+const UMAPSettings = ({ nNeighbors, setNNeighbors, iterations, setIterations }) => {
 
     return <FormGroup>
+        <TextField
+            id="textIterations"
+            label="Iterations"
+            type="number"
+            value={iterations}
+            onChange={(event) => {
+                setIterations(event.target.value)
+            }}
+        />
         <TextField
             id="textNNeighbors"
             label="n Neighbors"
@@ -112,8 +130,9 @@ const GenericSettingsComp = ({ domainSettings, open, onClose, onStart, projectio
                         <FormControl className={classes.root}>
                             <FormLabel component="legend">Projection Parameters</FormLabel>
 
-                            {domainSettings == 'umap' && <UMAPSettings nNeighbors={nNeighbors} setNNeighbors={setNNeighbors}></UMAPSettings>}
-                            {domainSettings == 'tsne' && <TSNESettings learningRate={learningRate} setLearningRate={setLearningRate} perplexity={perplexity} setPerplexity={setPerplexity}></TSNESettings>}
+                            {domainSettings == 'umap' && <UMAPSettings nNeighbors={nNeighbors} setNNeighbors={setNNeighbors} iterations={iterations} setIterations={setIterations}></UMAPSettings>}
+                            {domainSettings == 'tsne' && <TSNESettings learningRate={learningRate} setLearningRate={setLearningRate} perplexity={perplexity} setPerplexity={setPerplexity} iterations={iterations} setIterations={setIterations}></TSNESettings>}
+
                         </FormControl>
                     </Grid>
 
@@ -121,15 +140,6 @@ const GenericSettingsComp = ({ domainSettings, open, onClose, onStart, projectio
                         <FormControl className={classes.root}>
                             <FormLabel component="legend">General Parameters</FormLabel>
                             <FormGroup>
-                                <TextField
-                                    id="textIterations"
-                                    label="Iterations"
-                                    type="number"
-                                    value={iterations}
-                                    onChange={(event) => {
-                                        setIterations(event.target.value)
-                                    }}
-                                />
                                 <FormControlLabel
                                     control={<Checkbox color="primary" checked={seeded} onChange={(_, checked) => setSeeded(checked)} name="jason" />}
                                     label="Seed Position"

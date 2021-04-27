@@ -65,7 +65,7 @@ const SelectionClustersFull = function ({
                     alignItems: 'center',
                     justifyContent: 'center'
                 }}>
-                    <GenericChanges dataset={dataset} vectorsA={hoverState.data.source.vectors} vectorsB={hoverState.data.destination.vectors}></GenericChanges>
+                    <GenericChanges vectorsA={hoverState.data.source.vectors} vectorsB={hoverState.data.destination.vectors}></GenericChanges>
                 </Card>
             </HoverItemPortal>
         }

@@ -109,6 +109,15 @@ const initialState = {
     activeTraceState: null
 }
 
+function createEmptyTrace() {
+    return {
+        mainEdges: [],
+        mainPath: [],
+        sidePaths: []
+    }
+}
+
+
 export type StoriesType = {
     vectors: Vect[]
 
@@ -323,24 +332,17 @@ export default function stories(state: StoriesType = initialState, action): Stor
                 }
             })
 
-            return {
-                vectors: state.vectors,
-                stories: state.stories,
-                active: state.active,
-                trace: state.trace,
-                activeTraceState: state.activeTraceState
+            // Check if cluster is in active telling ... and close it
+            if (state.trace.mainPath.includes(cluster) || state.trace.sidePaths.find(sidePath => sidePath.nodes.includes(cluster))) {
+                return { ...state, trace: null, activeTraceState: null }
+            } else {
+                return { ...state }
             }
         }
         case ADD_EDGE_TO_ACTIVE: {
             state.active.edges.push(action.edge)
 
-            return {
-                vectors: state.vectors,
-                stories: state.stories,
-                active: state.active,
-                trace: state.trace,
-                activeTraceState: state.activeTraceState
-            }
+            return { ...state }
         }
         case ADD_CLUSTER_TO_ACTIVE: {
             let cluster = action.cluster
@@ -357,13 +359,7 @@ export default function stories(state: StoriesType = initialState, action): Stor
                 }
             })
 
-            return {
-                vectors: state.vectors,
-                stories: state.stories,
-                active: state.active,
-                trace: state.trace,
-                activeTraceState: state.activeTraceState
-            }
+            return { ...state }
         }
         case REMOVE_EDGE_FROM_ACTIVE: {
             state.active.edges.splice(state.active.edges.indexOf(action.edge), 1)

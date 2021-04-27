@@ -150,16 +150,13 @@ export const ClusteringTabPanel = connector(({
                 let clusters = dataset.clusters
 
                 if (dataset.clusterEdges && dataset.clusterEdges.length > 0) {
+                    // Case where edges are in the dataset
                     setClusterEdges(dataset.clusterEdges)
 
-                    //let stories = storyLayout(dataset.clusterEdges)
-
-                    //setStories(stories)
                     setStories([new Storybook(dataset.clusters, dataset.clusterEdges)])
-
-                    //setActiveStory(stories[0])
                 } else {
                     if (dataset.isSequential) {
+                        // Case where no edges are in the dataset but there are lines
                         const [edges] = graphLayout(clusters)
 
                         setClusterEdges(edges)

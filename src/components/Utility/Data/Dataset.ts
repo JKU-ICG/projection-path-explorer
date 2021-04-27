@@ -238,7 +238,7 @@ export class Dataset {
      * Returns the vectors in this dataset as a 2d array, which
      * can be used as input for tsne for example.
      */
-    asTensor(projectionColumns, samples?) {
+    asTensor(projectionColumns: {name: string, normalized: boolean}[], samples?) {
         var tensor = [];
 
         function oneHot(n, length) {

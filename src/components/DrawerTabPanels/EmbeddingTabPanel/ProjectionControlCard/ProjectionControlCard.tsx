@@ -6,6 +6,7 @@ import CloseIcon from '@material-ui/icons/Close';
 import { connect, ConnectedProps } from 'react-redux'
 import { RootState } from "../../../Store/Store";
 import { SettingsBackupRestoreSharp } from "@material-ui/icons";
+import { EmbeddingController } from "../EmbeddingController/EmbeddingController";
 
 /**
  * Styles for the projection card that allows to stop/resume projection steps.
@@ -56,7 +57,14 @@ type PropsFromRedux = ConnectedProps<typeof connector>
 type Props = PropsFromRedux & {
     onClose: any
     onComputingChanged: any
-    controller: any
+    controller: EmbeddingController
+}
+
+enum CState {
+    None,
+    Init,
+    Stepping,
+    Finished
 }
 
 /**
@@ -71,21 +79,38 @@ export var ProjectionControlCard = connector(({
 
     const classes = useStylesMedia();
 
+    const maxIterations = projectionParams?.method != 'pca' ? projectionParams?.iterations : 1
 
     const [step, setStep] = React.useState(0)
     const ref = React.useRef(step)
 
+    const [controllerState, setControllerState] = React.useState(CState.None)
+
     const [computing, setComputing] = React.useState(true)
 
+    React.useEffect(() => {
+        setControllerState(CState.Init)
+        controller.start()
+    }, [controller])
+
     controller.notifier = () => {
-        updateState(ref.current + 1)
+        if (controllerState == CState.Init) {
+            setControllerState(CState.Stepping)
+        } else if (controllerState == CState.Stepping) {
+            const step = ref.current + 1
+            if (step == maxIterations) {
+                setControllerState(CState.Finished)
+            } else {
+                updateState(step)
+            }
+        }
     }
 
     React.useEffect(() => {
-        if (step < projectionParams.iterations && computing) {
+        if (step < maxIterations && computing && controllerState == CState.Stepping) {
             controller.step()
         }
-    }, [step, computing])
+    }, [step, computing, controllerState])
 
     function updateState(newState) {
         ref.current = newState;
@@ -95,15 +120,20 @@ export var ProjectionControlCard = connector(({
     const titles = {
         forceatlas2: 'ForceAtlas2',
         umap: 'UMAP',
-        tsne: 't-SNE'
+        tsne: 't-SNE',
+        pca: 'PCA'
     }
 
     const genlabel = (step) => {
-        if (step == 0) {
-            return <div>Initializing Projection ...</div>
+        switch (controllerState) {
+            case CState.Init:
+                return <div>Initializing Projection ...</div>
+            case CState.Stepping:
+                const percent = Math.min((step / maxIterations) * 100, 100).toFixed(1)
+                return <div><div>{`${Math.min(step, maxIterations)}/${maxIterations}`}</div><div>{`${percent}%`}</div></div>
+            case CState.Finished:
+                return `Finished in ${maxIterations} steps.`
         }
-        const percent = Math.min((step / projectionParams.iterations) * 100, 100).toFixed(1)
-        return <div><div>{`${Math.min(step, projectionParams.iterations)}/${projectionParams.iterations}`}</div><div>{`${percent}%`}</div></div>
     }
 
     return (

@@ -511,7 +511,7 @@ export const StoryEditor = connector(class extends React.Component<Props, StoryE
             Math.floor(Math.random() * 100)
         )
 
-        node.cluster = Cluster.fromSamples(this.props.currentAggregation.aggregation)
+        node.cluster = Cluster.fromSamples(this.props.currentAggregation.aggregation, this.props.stories.active.getNextClusterLabel())
     }
 
     componentDidMount() {

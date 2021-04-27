@@ -33,6 +33,7 @@
     "lineupjsx": "^4.0.0",
     "lodash": "^4.17.20",
     "ml-conrec": "^3.2.0",
+    "ml-pca": "^4.0.2",
     "react": "^16.13.1",
     "react-dom": "^16.13.1",
     "react-draggable": "^4.4.3",

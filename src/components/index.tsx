@@ -81,7 +81,7 @@ import { HoverStateOrientation } from "./Ducks/HoverStateOrientationDuck";
 import Accordion from '@material-ui/core/Accordion';
 import AccordionDetails from '@material-ui/core/AccordionDetails';
 import AccordionSummary from '@material-ui/core/AccordionSummary';
-
+const { PCA } = require('ml-pca');
 
 /**
  * A TabPanel with a fixed height of 100vh which is needed for content with a scrollbar to work.
@@ -280,6 +280,7 @@ var Application = connector(class extends React.Component<Props, any> {
     this.setState({
       lineColorScheme: lineScheme
     })
+
 
 
 

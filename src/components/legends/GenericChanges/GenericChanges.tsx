@@ -13,7 +13,7 @@ type GenericChangesType = {
     vectorsA: Array<Vect>
     vectorsB: Array<Vect>
     dataset: Dataset
-    scale: number
+    scale?: number
 }
 
 const mapStateToProps = state => ({
@@ -23,7 +23,7 @@ const mapStateToProps = state => ({
 const mapDispatchToProps = dispatch => ({
 })
 
-export const GenericChanges = connect(mapStateToProps, mapDispatchToProps)(({ vectorsA, vectorsB, dataset, scale } : GenericChangesType) => {
+export const GenericChanges = connect(mapStateToProps, mapDispatchToProps)(({ vectorsA, vectorsB, dataset, scale = 1 } : GenericChangesType) => {
     switch (dataset.type) {
         case DatasetType.Rubik:
             return <RubikChanges width={81 * scale} height={108 * scale} vectorsA={vectorsA} vectorsB={vectorsB}></RubikChanges>

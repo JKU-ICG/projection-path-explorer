@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { uniqueIdentifierGenerator } from '../../NumTs/NumTs'
 import { Vect } from "./Vect"
 
 export default class Cluster {
@@ -9,12 +10,16 @@ export default class Cluster {
     triangulation: any
     vectors: Vect[]
     name: string
+    uuid: string
+
+    static uuidGenerator = uniqueIdentifierGenerator()
 
     constructor(points, bounds?, hull?, triangulation?) {
         this.points = points
         this.bounds = bounds
         this.hull = hull
         this.triangulation = triangulation
+        this.uuid = Cluster.uuidGenerator.next().value
     }
 
 
@@ -41,7 +46,7 @@ export default class Cluster {
     }
 
 
-    static fromSamples(samples: Vect[]) {
+    static fromSamples(samples: Vect[], label?: string) {
         let cluster = new Cluster(samples.map(sample => ({
             x: sample.x,
             y: sample.y,
@@ -49,7 +54,7 @@ export default class Cluster {
         })))
 
         cluster.vectors = samples
-        cluster.label = Math.floor(Math.random() * 1000)
+        cluster.label = label ? label : Math.floor(Math.random() * 1000)
         cluster.bounds = Cluster.calcBounds(samples)
 
         return cluster

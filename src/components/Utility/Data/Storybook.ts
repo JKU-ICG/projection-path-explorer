@@ -50,7 +50,7 @@ export class Storybook {
     }
 
 
-    getNextClusterLabel() {
+    getNextClusterLabel(): string {
         return this.labelGenerator.next().value
     }
 

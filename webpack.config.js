@@ -7,6 +7,7 @@ module.exports = {
     bundle: "./src/components/index.tsx",
     tsne: './src/components/workers/embeddings/worker_tsne.ts',
     umap: './src/components/workers/embeddings/worker_umap.ts',
+    pca: './src/components/workers/embeddings/worker_pca.ts',
     cluster: './src/components/workers/worker_cluster.tsx',
     forceatlas2: './src/components/workers/embeddings/worker_forceatlas2.ts',
     tessy: './src/components/workers/worker_triangulate.ts'

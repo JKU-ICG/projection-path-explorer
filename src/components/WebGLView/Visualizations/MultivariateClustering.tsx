@@ -7,7 +7,6 @@ import { DisplayMode } from "../../Ducks/DisplayModeDuck";
 import React = require("react");
 import { RootState } from "../../Store/Store";
 import { connect, ConnectedProps } from "react-redux";
-import { arraysEqual } from "../UtilityFunctions";
 import { NamedCategoricalScales } from "../../Utility/Colors/NamedCategoricalScales";
 import { TrailVisualization } from "./TrailVisualization";
 import { Typography } from "@material-ui/core";
@@ -16,9 +15,7 @@ import { Storybook } from "../../Utility/Data/Storybook";
 import * as nt from '../../NumTs/NumTs'
 const d3 = require("d3")
 import * as frontend_utils from "../../../utils/frontend-connect";
-import { toPlainObject } from "lodash";
 import { GroupVisualizationMode } from "../../Ducks/GroupVisualizationMode";
-import { SchemeColor } from "../../Utility/Colors/SchemeColor";
 
 
 const SELECTED_COLOR = 0x007dad
@@ -77,11 +74,12 @@ export const MultivariateClustering = connector(class extends React.Component<Pr
     devicePixelRatio: number
     scalingScene: Scene
     length: number
-    clusterVis: { clusterMeshes: THREE.Mesh<THREE.Geometry, THREE.MeshBasicMaterial>[], lineMeshes: THREE.Mesh<THREE.Geometry, THREE.MeshBasicMaterial>[] }
     trail: TrailVisualization
     clusterScene: THREE.Scene
 
     triangulationWorker: Worker
+
+    contourCache: {[key: string]: THREE.LineSegments} = {}
 
 
     constructor(props) {
@@ -119,11 +117,9 @@ export const MultivariateClustering = connector(class extends React.Component<Pr
         // If we have clusters now... and are on clusters tab... create cluster visualization
         if (prevProps.stories != this.props.stories) {
             this.destroy()
-            this.disposeTriangulatedMesh()
 
             if (this.props.stories.active && this.props.stories.active.clusters.length > 0) {
                 this.create()
-                this.createTriangulatedMesh()
             }
         }
 
@@ -184,8 +180,13 @@ export const MultivariateClustering = connector(class extends React.Component<Pr
         arrowGeometry.vertices = []
         arrowGeometry.faces = []
 
+        
+
         let index = 0
         this.props.stories.active?.edges.forEach(edge => {
+            const hovering = this.props.hoverState.data === edge
+            const scale = hovering ? 2.0 : 1.0
+
             let color = new THREE.Color(DEFAULT_COLOR)
             if (this.props.stories.trace && this.props.stories.trace.mainEdges.includes(edge)) {
                 color = new THREE.Color(SELECTED_COLOR)
@@ -196,9 +197,8 @@ export const MultivariateClustering = connector(class extends React.Component<Pr
             let middle = new THREE.Vector2().addVectors(start, new THREE.Vector2().subVectors(end, start).multiplyScalar(0.5))
 
             let dir = end.clone().sub(start).normalize()
-            let markerOffset = start.clone().sub(end).normalize().multiplyScalar(24)
-            let left = new Vector2(-dir.y, dir.x).multiplyScalar(LINE_WIDTH)
-            let right = new Vector2(dir.y, -dir.x).multiplyScalar(LINE_WIDTH)
+            let left = new Vector2(-dir.y, dir.x).multiplyScalar(LINE_WIDTH * scale)
+            let right = new Vector2(dir.y, -dir.x).multiplyScalar(LINE_WIDTH * scale)
             let offset = dir.clone().multiplyScalar(this.devicePixelRatio * CLUSTER_PIXEL_SIZE)
 
             // line without arrow
@@ -278,6 +278,9 @@ export const MultivariateClustering = connector(class extends React.Component<Pr
         let index = 0
 
         this.clusterObjects.forEach(clusterObject => {
+            const hovering = this.props.hoverState.data === clusterObject.cluster
+            const scale = hovering ? 1.5 : 1.0
+
             let cluster = clusterObject.cluster
             let center = cluster.getCenter()
             let mesh = clusterObject.mesh
@@ -286,7 +289,7 @@ export const MultivariateClustering = connector(class extends React.Component<Pr
 
             mesh.material.color = this.getColorForClusterObject(clusterObject)
 
-            mesh.scale.set(this.props.globalPointSize[0], this.props.globalPointSize[0], this.props.globalPointSize[0])
+            mesh.scale.set(this.props.globalPointSize[0] * scale, this.props.globalPointSize[0] * scale, this.props.globalPointSize[0] * scale)
 
             clusterObject.children.forEach(child => {
                 if (child.visible && this.props.displayMode == DisplayMode.StatesAndClusters) {
@@ -428,20 +431,17 @@ export const MultivariateClustering = connector(class extends React.Component<Pr
                 child.visible = false
             })
         })
-        if (this.clusterVis) {
-            this.clusterVis.lineMeshes.forEach(mesh => {
-                mesh.visible = false
-            })
-            this.clusterVis.clusterMeshes?.forEach(mesh => {
-                mesh.visible = false
-            })
+        for (const contour of Object.values(this.contourCache)) {
+            this.scalingScene.remove(contour)
         }
-
     }
 
 
     highlightCluster(clusters?: Cluster[]) {
+        this.deactivateAll()
+
         this.clusterObjects.forEach((clusterObject, index) => {
+            const cluster = clusterObject.cluster
             var visible = clusters?.includes(clusterObject.cluster) // for paper used: true
 
             clusterObject.material.color = visible ? new THREE.Color(SELECTED_COLOR) : new THREE.Color(DEFAULT_COLOR)
@@ -453,9 +453,59 @@ export const MultivariateClustering = connector(class extends React.Component<Pr
             }
 
 
-            if (this.clusterVis && this.props.groupVisualizationMode == GroupVisualizationMode.ConvexHull) {
-                this.clusterVis.clusterMeshes[index].visible = visible
-                this.clusterVis.lineMeshes[index].visible = visible
+            if (this.props.groupVisualizationMode === GroupVisualizationMode.ConvexHull) {
+                if (cluster.uuid in this.contourCache) {
+                    // We have cached contour
+                    const contour = this.contourCache[cluster.uuid]
+                    
+                    if (visible) {
+                        this.scalingScene.add(contour)
+                    }
+                } else {
+                    if (visible) {
+                        const bounds = Cluster.calcBounds(cluster.vectors)
+
+                        let xAxis = d3.scaleLinear()
+                            .range([0, 100])
+                            .domain([bounds.left, bounds.right])
+        
+                        let yAxis = d3.scaleLinear()
+                            .range([0, 100 * (bounds.height / bounds.width)])
+                            .domain([bounds.top, bounds.bottom])
+        
+        
+                        let contours = d3.contourDensity()
+                            .x(d => xAxis(d.x))
+                            .y(d => yAxis(d.y))
+                            .bandwidth(10)
+                            .thresholds(10)
+                            .size([100, bounds.width == 0 ? 1 : Math.floor(100 * (bounds.height / bounds.width))])
+                            (cluster.vectors.map(vect => ({ x: vect.x, y: vect.y })))
+        
+                        let clusterObject = this.clusterObjects.find(e => e.cluster.label == cluster.label)
+        
+                        let material = new THREE.LineBasicMaterial({ color: clusterObject.lineColor.hex })
+        
+                        const points = []
+                        contours.forEach(contour => {
+                            const coordinates = contour.coordinates[0][0]
+    
+                            for (let i = 0; i < coordinates.length - 1; i++) {
+                                let cur = coordinates[i]
+                                let next = coordinates[i + 1]
+        
+                                points.push(new THREE.Vector3(xAxis.invert(cur[0]), yAxis.invert(cur[1]), -5))
+                                points.push(new THREE.Vector3(xAxis.invert(next[0]), yAxis.invert(next[1]), -5))
+                            }
+                        })
+                        let line = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), material)
+        
+                        line.visible = true
+                        this.scalingScene.add(line)
+
+                        this.contourCache[cluster.uuid] = line
+                    }
+                }
             }
         })
     }
@@ -482,95 +532,10 @@ export const MultivariateClustering = connector(class extends React.Component<Pr
         }
     }
 
+    sync() {
 
-
-    /**
-     * Creates the triangulated mesh that visualizes the clustering.
-     * @param clusters an array of clusters
-     */
-    createTriangulatedMesh() {
-        this.disposeTriangulatedMesh()
-
-        if (this.props.groupVisualizationMode != GroupVisualizationMode.ConvexHull) {
-            return;
-        }
-
-        var clusterMeshes = []
-        var lineMeshes = []
-
-        if (this.props.stories.active) {
-            this.props.stories.active.clusters.map(cluster => {
-                const bounds = Cluster.calcBounds(cluster.vectors)
-
-                let xAxis = d3.scaleLinear()
-                    .range([0, 100])
-                    .domain([bounds.left, bounds.right])
-
-                let yAxis = d3.scaleLinear()
-                    .range([0, 100 * (bounds.height / bounds.width)])
-                    .domain([bounds.top, bounds.bottom])
-
-
-                let contours = d3.contourDensity()
-                    .x(d => xAxis(d.x))
-                    .y(d => yAxis(d.y))
-                    .bandwidth(10)
-                    .thresholds(10)
-                    .size([100, bounds.width == 0 ? 1 : Math.floor(100 * (bounds.height / bounds.width))])
-                    (cluster.vectors.map(vect => ({ x: vect.x, y: vect.y })))
-
-                let clusterObject = this.clusterObjects.find(e => e.cluster.label == cluster.label)
-
-                let material = new THREE.LineBasicMaterial({ color: clusterObject.lineColor.hex })
-
-                const points = []
-                contours.forEach(contour => {
-                    const coordinates = contour.coordinates[0][0]
-
-
-                    for (let i = 0; i < coordinates.length - 1; i++) {
-                        let cur = coordinates[i]
-                        let next = coordinates[i + 1]
-
-                        points.push(new THREE.Vector3(xAxis.invert(cur[0]), yAxis.invert(cur[1]), -5))
-                        points.push(new THREE.Vector3(xAxis.invert(next[0]), yAxis.invert(next[1]), -5))
-                    }
-                })
-                let line = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), material)
-
-                line.visible = false
-                this.scalingScene.add(line)
-
-                lineMeshes.push(line)
-                clusterMeshes.push(line)
-            })
-        }
-
-        this.clusterVis = { clusterMeshes: clusterMeshes, lineMeshes: lineMeshes }
     }
 
-
-
-    /**
-     * Destroys the triangulated view of the clusters.
-     */
-    disposeTriangulatedMesh() {
-        if (this.clusterVis != null) {
-            const { clusterMeshes, lineMeshes } = this.clusterVis
-            clusterMeshes?.forEach(mesh => {
-                mesh.geometry.dispose()
-                mesh.material.dispose()
-                this.scalingScene.remove(mesh)
-            })
-            lineMeshes?.forEach(mesh => {
-                mesh.geometry.dispose()
-                mesh.material.dispose()
-                this.scalingScene.remove(mesh)
-            })
-
-            this.clusterVis = null
-        }
-    }
 
     /**
      * Returns the label color of a given cluster

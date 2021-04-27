@@ -1301,7 +1301,7 @@ export const WebGLView = connector(class extends React.Component<Props, ViewStat
     repositionClusters() {
         this.multivariateClusterView?.current.updatePositions(this.camera.zoom)
         this.multivariateClusterView?.current.iterateTrail(this.camera.zoom)
-        this.multivariateClusterView?.current.createTriangulatedMesh()
+        this.multivariateClusterView?.current.sync()
     }
 
     loadProjection(projection: Embedding) {
@@ -1377,14 +1377,14 @@ export const WebGLView = connector(class extends React.Component<Props, ViewStat
             >
                 <MenuItem onClick={() => {
                     if (this.props.currentAggregation.aggregation.length > 0) {
-                        let cluster = Cluster.fromSamples(this.props.currentAggregation.aggregation)
-
                         if (!this.props.stories.active) {
-                            let story = new Storybook([cluster], [])
+                            let story = new Storybook([], [])
+                            story.clusters.push(Cluster.fromSamples(this.props.currentAggregation.aggregation, story.getNextClusterLabel()))
+                            
                             this.props.addStory(story)
                             this.props.setActiveStory(story)
                         } else {
-                            this.props.addClusterToStory(cluster)
+                            this.props.addClusterToStory(Cluster.fromSamples(this.props.currentAggregation.aggregation, this.props.stories.active.getNextClusterLabel()))
                         }
                     }
 

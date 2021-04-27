@@ -246,7 +246,7 @@ class ProvenanceGraph extends React.PureComponent<any, any> {
                                 return <g key={`${p.x}${p.y}`}>
                                     <line x1={midX} y1={p1.y} x2={midX} y2={p2.y} stroke={mainColor} strokeWidth="2"></line>
                                     <Plus x={midX} y={p2.y} r={10} onClick={() => {
-                                        let cluster = Cluster.fromSamples(currentAggregation.aggregation)
+                                        let cluster = Cluster.fromSamples(currentAggregation.aggregation, stories.active.getNextClusterLabel())
 
                                         addClusterToTrace(cluster)
 
@@ -261,7 +261,7 @@ class ProvenanceGraph extends React.PureComponent<any, any> {
                             <line x1={midX} y1={0} x2={midX} y2={100} stroke={mainColor} strokeWidth="2"></line>
                             <Plus x={midX} y={100} r={10} onClick={() => {
                                 if (currentAggregation.aggregation.length > 0) {
-                                    let cluster = Cluster.fromSamples(this.props.currentAggregation.aggregation)
+                                    let cluster = Cluster.fromSamples(this.props.currentAggregation.aggregation, stories.active.getNextClusterLabel())
 
                                     addClusterToTrace(cluster)
                                 }
