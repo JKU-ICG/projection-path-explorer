@@ -33,10 +33,12 @@ export var DatasetDrop = ({ onChange, cancellablePromise, abort_controller }) =>
                 setEntry(file);
                 setOpen(true);
             }else{
-
                 var reader = new FileReader()
                 reader.onload = (event) => {
                     var content = event.target.result
+                    if(content === ""){
+                        alert("file could not be loaded. filesize too big")
+                    }
 
                     if (fileName.endsWith('json')) {
                         new JSONLoader().resolveContent(content, onChange)
