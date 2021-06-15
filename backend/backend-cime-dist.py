@@ -15,7 +15,7 @@ session_path = './session_data'
 session_opts = {
     'session.timeout': 1800, # timeout after 30 min if no interaction with the session occurs
 #    'session.cookie_expires': 20,
-    'session.auto': True,
+    'session.auto': False, # True -> enables automatic saving of session updates
 #    'session.type': 'memory',
     'session.type': 'file',
     'session.data_dir': session_path,
@@ -42,6 +42,12 @@ def cleanup_session_files(): # TODO: try if it works as expected
 @hook('before_request')
 def setup_request():
     request.session = bottle.request.environ.get('beaker.session')
+    # the code below shows that there is a memory issue with beaker sessions
+    #print("before session")
+    #print_memory()
+    #print(request.session.keys())
+    #print("after session")
+    #print_memory()
     try:
         cleanup_session_files()
     except FileNotFoundError:
@@ -60,18 +66,36 @@ def tryParseFloat(value):
   except ValueError:
     return value
     
+
+# not needed for production server
+#import psutil
+#def print_memory():
+#    mem = dict(psutil.virtual_memory()._asdict())
+#    print("percent:", mem["percent"], "|", "used MB:", mem["used"]/1000000)
+
+    
+import sys
 from rdkit import Chem
 from rdkit.Chem.PropertyMol import PropertyMol
 # adapt LoadSDF method from rdkit. this version creates a pandas dataframe excluding atom specific properties and does not give every property the object type
 def my_load_sdf(filename, idName='ID', smilesName="SMILES", molColName='Molecule'):
     
     records = []
+    rep_list = set()
     with open(filename, 'rb') as file:
         suppl = Chem.ForwardSDMolSupplier(file)
+        i = 0
         for mol in suppl:
             if mol is None:
                 continue
-            row = dict((k, tryParseFloat(mol.GetProp(k))) for k in mol.GetPropNames() if not k.startswith("atom"))
+            #row = dict((k, tryParseFloat(mol.GetProp(k))) for k in mol.GetPropNames() if not k.startswith("atom"))
+            row = {}
+            for k in mol.GetPropNames():
+                if k.startswith("atom"):
+                    rep_list.add(k)
+                else:
+                    row[k] = tryParseFloat(mol.GetProp(k))
+            
             if mol.HasProp('_Name'):
                 row[idName] = mol.GetProp('_Name')
             if smilesName is not None:
@@ -80,41 +104,67 @@ def my_load_sdf(filename, idName='ID', smilesName="SMILES", molColName='Molecule
                 except:
                     row[smilesName] = None
             if molColName is not None:
-                row[molColName] = pickle.dumps(PropertyMol(mol))
-
+                row[molColName] = pickle.dumps(PropertyMol(mol), protocol=4)
             records.append(row)
-    conv_time = time.time()
+            
+            i += 1
+            
+        
     frame = pd.DataFrame(records)
-    return frame
+    del records
+    return frame, list(rep_list)
         
 # load sdf file and turn it into a dataframe
 def sdf_to_df(filename = None, refresh = False):
-    
-    filename = request.session.get('unique_filename', filename)
+
+    if filename is None or filename == "":
+        filename = request.session.get("unique_filename", None)
     
     if "df" in request.session and not refresh:
         #print(request.session["df"].memory_usage(index=True, deep=True).sum()/1000000)
-        return request.session["df"]
+        df = request.session["df"]
+        if df is not None:
+            return request.session["df"]
 
     elif filename: 
         if request.session.get("loading", False):
             return None
-        request.session["loading"] = True
-        print("---------load-------------")
-        if os.path.exists("./temp-files/%s.pkl"%filename.split('.')[0]):
-            print("load_pickle")
-            frame = pd.read_pickle("./temp-files/%s.pkl"%filename.split('.')[0])
-        else:
-            print("load_sdf")
-            frame = my_load_sdf("./temp-files/%s"%filename,smilesName=smiles_col,molColName=mol_col)
-            frame = frame.fillna(0)
-            frame = frame.replace("nan", 0)
-            frame.to_pickle("./temp-files/%s.pkl"%filename.split('.')[0])
+            
+        try:
+            request.session["loading"] = True
+            print("---------load-------------")
+            
+            request.session['df'] = None # get old df out of memory
+            request.session.save()
+            
+            if os.path.exists("./temp-files/%s.pkl"%filename.split('.')[0]):
+                print("load_pickle")
+                frame = pd.read_pickle("./temp-files/%s.pkl"%filename.split('.')[0])
+            else:
+                print("load_sdf")
+                frame, rep_list = my_load_sdf("./temp-files/%s.sdf"%filename.split('.')[0],smilesName=smiles_col,molColName=mol_col)
+                
+                print("end load_sdf")
+                frame = frame.fillna(0)
+                frame = frame.replace("nan", 0)
+                frame.to_pickle("./temp-files/%s.pkl"%filename.split('.')[0], protocol=4)
+                
+                with open("./temp-files/%s_rep_list.pkl"%filename.split('.')[0], 'wb') as file:
+                    pickle.dump(rep_list, file, protocol=4)
+                    
+                # we don't need the sdf file anymore at this point
+                delete_uploaded_file(filename, sdf_only=True)
+            
+            request.session['df'] = frame
+            request.session["loading"] = False
+            request.session["unique_filename"] = filename
+            request.session.save()
+            
+            return frame
         
-        request.session['df'] = frame
-        request.session["loading"] = False
-        
-        return frame
+        finally:
+            request.session["loading"] = False
+            request.session.save()
     
     return None
     
@@ -128,25 +178,31 @@ def sdf_to_df(filename = None, refresh = False):
 def get_uploaded_files_list():
     folder = './temp-files'
     if os.path.exists("./temp-files"):
-        file_names = [filename for filename in os.listdir(folder) if filename.endswith('.sdf')]
-        return {"file_list": file_names}
+        file_names = [filename.split(".")[0] for filename in os.listdir(folder) if filename.endswith('.sdf') or (filename.endswith('.pkl') and not filename.endswith('_rep_list.pkl'))]
+        return {"file_list": list(set(file_names))}
 
     return {"file_list": []}
 
 
 @bottle.route('/delete_file/<filename>', method=['GET'])
-def delete_uploaded_file(filename):
-    if filename == "test.sdf":
+def delete_uploaded_file(filename, sdf_only = False):
+    if filename == "test.sdf" or filename == "test":
         return {"deleted": "false", "error": "can't delete default file"}
     folder = './temp-files'
-    if os.path.exists("./temp-files"):
-        file = os.path.join(folder, filename)
+    if os.path.exists(folder):
+        file = os.path.join(folder, '%s.sdf'%filename.split('.')[0])
         file_pkl = os.path.join(folder, '%s.pkl'%filename.split('.')[0])
+        file_rep_lst_pkl = os.path.join(folder, '%s_rep_list.pkl'%filename.split('.')[0])
         if os.path.exists(file):
             os.remove(file)
-            if os.path.exists(file_pkl):
-                os.remove(file_pkl)
-            return {"deleted": "true"}
+            
+        if os.path.exists(file_pkl) and not sdf_only:
+            os.remove(file_pkl)
+                
+        if os.path.exists(file_rep_lst_pkl) and not sdf_only:
+            os.remove(file_rep_lst_pkl)
+            
+        return {"deleted": "true"}
 
     return {"deleted": "false", "error": "could not delete file. try again later"}
 
@@ -189,6 +245,7 @@ def upload_sdf():
         uploaded_file_size = os.stat("./temp-files/%s"%filename).st_size
         if uploaded_file_size == supposed_file_size: # if the filesizes match, the upload was successful
             request.session['unique_filename'] = filename
+            request.session.save()
             return {
                 'filename': fileUpload.filename,
                 'unique_filename': filename,
@@ -200,15 +257,17 @@ def upload_sdf():
     else:
         return {}
 
+import time
 @bottle.route('/get_csv/', method=['GET'])
 @bottle.route('/get_csv/<filename>/', method=['GET'])
 @bottle.route('/get_csv/<filename>/<modifiers>', method=['GET'])
 def sdf_to_csv(filename=None, modifiers=None):
+    start_time = time.time()
     if modifiers:
         descriptor_names_no_lineup.extend([x.strip() for x in modifiers.split(";")]) # split and trim modifier string
         
-    if filename: # update filename in session, if it is provided (usecase: maybe user wants to use a dataset that is already uploaded)
-        request.session['unique_filename'] = filename
+    if filename: # if a filename is provided, reset the session to free memory
+        request.session.invalidate()
         
     frame = sdf_to_df(filename, refresh=True)
     
@@ -235,12 +294,12 @@ def sdf_to_csv(filename=None, modifiers=None):
             modifier = '%s"noLineUp":true,'%modifier # this modifier tells lineup that the column should not be viewed at all (remove this modifier, if you want to be able to add the column with the sideview of lineup)
             modifier = '%s"featureLabel":"%s",'%(modifier, col.split("_")[0]) # this modifier tells lineup that the columns belong to a certain group
             split_col = col.split("_")
-            col_name = split_col[1] + " (" + split_col[0] + ")"
+            col_name = col.replace(split_col[0]+"_", "") + " (" + split_col[0] + ")"
         elif col.startswith(tuple(descriptor_names_show_lineup)):
             #modifier = '%s"showLineUp":true,'%modifier # this modifier tells lineup that the column should be initially viewed
             modifier = '%s"featureLabel":"%s",'%(modifier, col.split("_")[0]) # this modifier tells lineup that the columns belong to a certain group
             split_col = col.split("_")
-            col_name = split_col[1] + " (" + split_col[0] + ")"
+            col_name = col.replace(split_col[0]+"_", "") + " (" + split_col[0] + ")"
         #else:
             #modifier = '%s"showLineUp":true,'%modifier # this modifier tells lineup that the column should be initially viewed
             
@@ -249,7 +308,7 @@ def sdf_to_csv(filename=None, modifiers=None):
             
             split_col = col.split("_")
             if len(split_col) >= 2:
-                col_name = split_col[1] + " (" + split_col[0] + ")"
+                col_name = col.replace(split_col[0]+"_", "") + " (" + split_col[0] + ")"
             
         if col == "ID":
             modifier = '%s"dtype":"string","project":false,'%modifier # TODO: json crashed....
@@ -266,6 +325,11 @@ def sdf_to_csv(filename=None, modifiers=None):
     
     csv_buffer = StringIO()
     frame.to_csv(csv_buffer, index=False)
+    
+    delta_time = time.time()-start_time
+    print("took", time.strftime('%H:%M:%S', time.gmtime(delta_time)), "to load file %s"%filename)
+    print("took %i min %f s to load file %s"%(delta_time/60, delta_time%60, filename))
+    #print("get_csv time elapsed [s]:", time.time()-start_time)
     
     return csv_buffer.getvalue()
 
@@ -343,7 +407,6 @@ def mol_to_base64_highlight_substructure(mol, patt, width=250, d = None, showMCS
     
     if d is None:
         d = Chem.Draw.rdMolDraw2D.MolDraw2DCairo(width, width) # MolDraw2DSVG
-    
     if showMCS:
         hit_ats = list(mol.GetSubstructMatch(patt))
         hit_bonds = []
@@ -363,16 +426,14 @@ def mol_to_base64_highlight_substructure(mol, patt, width=250, d = None, showMCS
         Chem.Draw.rdMolDraw2D.PrepareAndDrawMolecule(d, mol, highlightAtoms=hit_ats, highlightBonds=hit_bonds, highlightAtomColors=atom_cols, highlightBondColors=bond_cols)
     
     d.FinishDrawing()
-
     stream = BytesIO(d.GetDrawingText())
     # image = Image.open(stream).convert("RGBA")
-
     img_str = base64.b64encode(stream.getvalue())
     stream.close()
     return img_str.decode("utf-8") #d.GetDrawingText()
 
 import re
-def mol_to_base64_highlight_importances(mol_aligned, patt, current_rep, contourLines, scale, sigma, showMCS, width=250):
+def mol_to_base64_highlight_importances(df, mol_aligned, patt, current_rep, contourLines, scale, sigma, showMCS, width=250):
     contourLines = int(contourLines)
     scale = float(scale)
     sigma = float(sigma)
@@ -382,10 +443,8 @@ def mol_to_base64_highlight_importances(mol_aligned, patt, current_rep, contourL
     if sigma <= 0:
         sigma = None
     
-    filename = request.forms.get("filename")
-    filename = request.session.get("unique_filename", filename)
-    if filename:
-        df = sdf_to_df(filename)
+    
+    if df is not None:
         if df is not None:
             d = Chem.Draw.rdMolDraw2D.MolDraw2DCairo(width, width) # MolDraw2DSVG
             smiles = Chem.MolToSmiles(mol_aligned)
@@ -407,7 +466,7 @@ def mol_to_base64_highlight_importances(mol_aligned, patt, current_rep, contourL
 
 
 # --- routing ---
-
+import copy
 @bottle.route('/get_difference_highlight', method=['OPTIONS', 'POST'])
 def smiles_to_difference_highlight():
     if request.method == 'POST':
@@ -436,17 +495,20 @@ def smiles_to_difference_highlight():
         
         
         # need a copy because otherwise the structure is messed up
-        molA_cpy = Chem.MolFromSmiles(smilesA)
-        molB_cpy = Chem.MolFromSmiles(smilesB)
-        mol_cpy = molA_cpy
+        molA_cpy = copy.deepcopy(molA)#molA#Chem.MolFromSmarts(smilesA)
+        molB_cpy = copy.deepcopy(molB)#molB#Chem.MolFromSmarts(smilesB)
+        #mol_cpy = molB_cpy
         patt = get_mcs([molA_cpy, molB_cpy])
         
-        mol = molA
+        mol = molB
         
-        highlight_atom_colors = None
-        highlight_bond_colors = None
-        highlight_atoms = set(range(len(mol_cpy.GetAtoms()))) - set(mol_cpy.GetSubstructMatch(patt))
-        highlight_bonds = [bond.GetIdx() for bond in mol_cpy.GetBonds() if bond.GetBeginAtomIdx() in highlight_atoms or bond.GetEndAtomIdx() in highlight_atoms]
+        highlight_atoms = set(range(len(mol.GetAtoms()))) - set(mol.GetSubstructMatch(patt))
+        highlight_bonds = [bond.GetIdx() for bond in mol.GetBonds() if bond.GetBeginAtomIdx() in highlight_atoms or bond.GetEndAtomIdx() in highlight_atoms]
+        print(highlight_atoms, mol.GetSubstructMatch(patt))
+
+        highlight_atom_colors = {i: (0,0.49,0.68) for i in highlight_atoms}
+        highlight_bond_colors = {i: (0,0.49,0.68) for i in highlight_bonds}
+        #print(mol_cpy.GetSubstructMatch(patt), mol.GetSubstructMatch(patt), highlight_atoms)
 
         d = Chem.Draw.rdMolDraw2D.MolDraw2DCairo(200, 200)
         Chem.Draw.rdMolDraw2D.PrepareAndDrawMolecule(d, mol, highlightAtoms=highlight_atoms, highlightBonds=highlight_bonds, highlightAtomColors=highlight_atom_colors, highlightBondColors=highlight_bond_colors)
@@ -513,6 +575,11 @@ def smiles_list_to_imgs():
         else:
             patt = Chem.MolFromSmiles("*")
 
+        df = None
+        if current_rep != "Common Substructure":
+            filename = request.forms.get("filename")
+            df = sdf_to_df(filename)
+            
         img_lst = []
         for mol in mol_lst:
             if doAlignment: # if user disables alignment, skip
@@ -523,7 +590,7 @@ def smiles_list_to_imgs():
             if current_rep == "Common Substructure":
                 img_lst.append(mol_to_base64_highlight_substructure(mol, patt, width=width))
             else:
-                img_lst.append(mol_to_base64_highlight_importances(mol, patt, current_rep, contourLines, scale, sigma, showMCS, width))
+                img_lst.append(mol_to_base64_highlight_importances(df, mol, patt, current_rep, contourLines, scale, sigma, showMCS, width))
 
         return {"img_lst": img_lst, "error_smiles": error_smiles}
     else:
@@ -563,11 +630,30 @@ def smiles_list_to_common_substructure_img():
 @bottle.route('/get_atom_rep_list', method=["GET"])
 @bottle.route('/get_atom_rep_list/<filename>', method=["GET"])
 def get_atom_rep_list(filename=None):
-    filename = request.session.get("unique_filename", filename)
+    
+    rep_list = None
+    
+    if filename is None or filename == "":
+        filename = request.session.get("unique_filename", None)
+    
+    if os.path.exists("./temp-files/%s_rep_list.pkl"%filename.split('.')[0]):
+        with open("./temp-files/%s_rep_list.pkl"%filename.split('.')[0], 'rb') as file:
+            rep_list = pickle.load(file)
+            
+    if rep_list is not None:
+        print("from pkl")
+        return {"rep_list": rep_list}
+        
+    print("from mol")
     if filename:
         df = sdf_to_df(filename)
         if df is not None:
-            rep_list = [rep for rep in pickle.loads(df[mol_col][0]).GetPropsAsDict().keys() if rep.startswith('atom')]
+            rep_list = [rep for rep in pickle.loads(df[mol_col][0]).GetPropNames() if rep.startswith('atom')]
+            
+            with open("./temp-files/%s_rep_list.pkl"%filename.split('.')[0], 'wb') as file:
+                pickle.dump(rep_list, file, protocol=4)
+            
+            print("from mol")
             return {"rep_list": rep_list}
     
     return {"rep_list":[], "error": "no filename specified"}
